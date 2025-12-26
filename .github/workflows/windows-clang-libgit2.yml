@@ -9,7 +9,6 @@ jobs:
   build:
     runs-on: windows-latest
     
-    # Force all run steps to use Bash instead of PowerShell
     defaults:
       run:
         shell: bash
@@ -39,8 +38,6 @@ jobs:
           cd libgit2
           mkdir build && cd build
           
-          # We explicitly point to clang.exe (the driver) rather than clang-cl
-          # Using Ninja generator is recommended for Clang on Windows
           cmake .. \
             -G "Ninja" \
             -DCMAKE_C_COMPILER="$(pwd)/../../llvm_install/bin/clang.exe" \
@@ -48,3 +45,4 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release
             
           cmake --build .
+
