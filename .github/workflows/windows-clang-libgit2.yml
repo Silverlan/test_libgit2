@@ -1,0 +1,121 @@
+name: Build libgit2 with clang (Windows, bash)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-windows-clang:
+    runs-on: windows-latest
+    # use a bash shell for all run steps (GitHub provides git-bash)
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout this repo (optional)
+        uses: actions/checkout@v4
+        # This checks out the repository where the workflow lives.
+        # If you only want to build the external repository and not this repo,
+        # you can remove this step.
+      
+      - name: Checkout Silverlan/test_libgit2
+        uses: actions/checkout@v4
+        with:
+          repository: Silverlan/test_libgit2
+          path: test_libgit2
+
+      - name: Show runner info (debug)
+        run: |
+          echo "Running on: $(uname -a || true)"
+          echo "Runner temp: $RUNNER_TEMP"
+          echo "Workspace: $GITHUB_WORKSPACE"
+          cmake --version || true
+          which curl || which wget || true
+
+      - name: Download LLVM/Clang release (tar.xz)
+        run: |
+          set -e
+          LLVM_URL="https://github.com/llvm/llvm-project/releases/download/llvmorg-21.1.8/clang+llvm-21.1.8-x86_64-pc-windows-msvc.tar.xz"
+          mkdir -p "$RUNNER_TEMP/clang-tar"
+          echo "Downloading $LLVM_URL..."
+          curl -L -o "$RUNNER_TEMP/clang.tar.xz" "$LLVM_URL"
+          mkdir -p "$RUNNER_TEMP/clang"
+          echo "Extracting to $RUNNER_TEMP/clang..."
+          # -J handles xz, --strip-components=1 removes top-level folder in archive
+          tar -xJf "$RUNNER_TEMP/clang.tar.xz" -C "$RUNNER_TEMP/clang" --strip-components=1
+          echo "Extraction done. Listing bin:"
+          ls -la "$RUNNER_TEMP/clang/bin" || true
+
+      - name: Add downloaded clang to PATH for following steps
+        run: |
+          echo "$RUNNER_TEMP/clang/bin" >> "$GITHUB_PATH"
+          echo "Added $RUNNER_TEMP/clang/bin to PATH"
+          # verify it is available
+          clang --version || true
+          clang++ --version || true
+        # note: no environment block here — writing to $GITHUB_PATH updates PATH for subsequent steps
+
+      - name: Prepare build directory and show clang tools
+        run: |
+          set -e
+          echo "Which clang is now on PATH:"
+          which clang || true
+          which clang++ || true
+          ls -la "$RUNNER_TEMP/clang/bin" || true
+          mkdir -p build
+          cd build
+          pwd
+          ls -la ..
+
+      - name: Configure with CMake using clang / Ninja
+        run: |
+          set -e
+          # Explicitly point CMake to the clang frontends (NOT clang-cl).
+          # Use the Ninja generator (Ninja is available on GitHub Windows runners).
+          # Use lld-link as linker shipped in the llvm package to avoid using MSVC link.exe.
+          CLANG_BIN="$RUNNER_TEMP/clang/bin"
+          C_COMPILER="${CLANG_BIN}/clang"
+          CXX_COMPILER="${CLANG_BIN}/clang++"
+          LLD_LINK="${CLANG_BIN}/lld-link"
+          # create and enter build dir
+          mkdir -p build
+          cd build
+          echo "C compiler: $C_COMPILER"
+          echo "C++ compiler: $CXX_COMPILER"
+          echo "Linker (if present): $LLD_LINK"
+          # Run CMake configure
+          cmake -G "Ninja" \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER="$C_COMPILER" \
+            -DCMAKE_CXX_COMPILER="$CXX_COMPILER" \
+            -DCMAKE_LINKER="$LLD_LINK" \
+            -DCMAKE_INSTALL_PREFIX="$PWD/install" \
+            ../test_libgit2
+
+      - name: Build libgit2
+        run: |
+          set -e
+          cd build
+          # Build Release (Ninja ignores --config but cmake --build supports it for multi-config systems)
+          cmake --build . --target all -- -v
+          # Optional: run tests if configured
+          # cmake --build . --target test
+
+      - name: Install (optional)
+        run: |
+          set -e
+          cd build
+          cmake --install . --prefix install || true
+          echo "Installed into $(pwd)/install"
+          ls -la install || true
+
+      - name: Archive artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: libgit2-build
+          path: |
+            build
+            build/install
