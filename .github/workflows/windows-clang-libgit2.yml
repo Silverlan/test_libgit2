@@ -2,7 +2,7 @@ name: Build libgit2 with Clang (Windows)
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "fix" ]
   workflow_dispatch:
 
 jobs:
@@ -17,7 +17,7 @@ jobs:
       - name: Checkout libgit2
         uses: actions/checkout@v4
         with:
-          repository: libgit2/libgit2
+          repository: Silverlan/libgit2
           path: libgit2
 
       - name: Download and Extract LLVM
@@ -45,4 +45,5 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release
             
           cmake --build .
+
 
