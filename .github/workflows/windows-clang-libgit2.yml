@@ -9,53 +9,42 @@ jobs:
   build:
     runs-on: windows-latest
     
-    # Setting the default shell to bash for all steps in this job
+    # Force all run steps to use Bash instead of PowerShell
     defaults:
       run:
         shell: bash
 
     steps:
-      - name: Checkout repository
+      - name: Checkout libgit2
         uses: actions/checkout@v4
         with:
-          repository: 'Silverlan/test_libgit2'
+          repository: libgit2/libgit2
+          path: libgit2
 
       - name: Download and Extract LLVM
         run: |
-          echo "Downloading LLVM 21.1.8..."
+          echo "Downloading LLVM..."
           curl -L -o llvm.tar.xz https://github.com/llvm/llvm-project/releases/download/llvmorg-21.1.8/clang+llvm-21.1.8-x86_64-pc-windows-msvc.tar.xz
           
           echo "Extracting LLVM..."
-          # tar in Git Bash handles .tar.xz
-          tar -xf llvm.tar.xz
+          mkdir -p llvm_install
+          # -C changes to the directory, --strip-components-1 removes the top-level folder from the archive
+          tar -xf llvm.tar.xz -C llvm_install --strip-components=1
           
-          # Move to a simpler path to avoid space issues and long path names
-          mv clang+llvm-21.1.8-x86_64-pc-windows-msvc llvm_dist
+          # Add Clang to the path for this session
+          echo "$(pwd)/llvm_install/bin" >> $GITHUB_PATH
 
       - name: Configure and Build libgit2
         run: |
-          # Define absolute paths for the compilers
-          # We use the full path to clang.exe/clang++.exe to avoid clang-cl defaults
-          LLVM_PATH=$(pwd)/llvm_dist/bin
-          export CC="$LLVM_PATH/clang.exe"
-          export CXX="$LLVM_PATH/clang++.exe"
+          cd libgit2
+          mkdir build && cd build
           
-          echo "Using Compiler: $CC"
-          
-          mkdir build
-          cd build
-          
-          # Using Ninja as it is the most reliable generator for Clang on Windows
-          # -DUSE_SSH=OFF and -DENABLE_TRACE=ON are common libgit2 flags
+          # We explicitly point to clang.exe (the driver) rather than clang-cl
+          # Using Ninja generator is recommended for Clang on Windows
           cmake .. \
             -G "Ninja" \
-            -DCMAKE_C_COMPILER="$CC" \
-            -DCMAKE_CXX_COMPILER="$CXX" \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DBUILD_SHARED_LIBS=ON
-          
-          cmake --build . --config Release
-
-      - name: Verify Build
-        run: |
-          ls -R build/*.dll build/*.lib || echo "Build artifacts not found where expected"
+            -DCMAKE_C_COMPILER="$(pwd)/../../llvm_install/bin/clang.exe" \
+            -DCMAKE_CXX_COMPILER="$(pwd)/../../llvm_install/bin/clang++.exe" \
+            -DCMAKE_BUILD_TYPE=Release
+            
+          cmake --build .
