@@ -33,7 +33,7 @@ jobs:
           # Add Clang to the path for this session
           echo "$(pwd)/llvm_install/bin" >> $GITHUB_PATH
 
-      - name: Configure and Build libgit2
+      - name: Configure and Build libgit2 (clang)
         run: |
           cd libgit2
           mkdir build && cd build
@@ -46,4 +46,13 @@ jobs:
             
           cmake --build .
 
-
+      - name: Configure and Build libgit2 (clang-cl)
+        run: |
+          cd libgit2
+          mkdir build_clangcl && cd build_clangcl
+          
+          cmake .. \
+            -G "Ninja" \
+            -DCMAKE_C_COMPILER="$(pwd)/../../llvm_install/bin/clang-cl.exe" \
+            -DCMAKE_CXX_COMPILER="$(pwd)/../../llvm_install/bin/clang-cl.exe" \
+            -DCMAKE_BUILD_TYPE=Release
